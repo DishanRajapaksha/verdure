@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { UnderstoryPlacement } from '../lib/forest'
+import { WindStandardMaterial } from './WindMaterial'
 
 const fernDark = new THREE.Color('#294626')
 const fernLight = new THREE.Color('#76944b')
@@ -23,7 +24,13 @@ const grassBlades = 5
 const mossClumps = 3
 const saplingLeaves = 4
 
-export function Understory({ plants }: { plants: UnderstoryPlacement[] }) {
+export function Understory({
+  plants,
+  reducedMotion = false,
+}: {
+  plants: UnderstoryPlacement[]
+  reducedMotion?: boolean
+}) {
   const groups = useMemo(
     () => ({
       ferns: plants.filter((plant) => plant.kind === 'fern'),
@@ -89,12 +96,7 @@ export function Understory({ plants }: { plants: UnderstoryPlacement[] }) {
           plant.y + 0.015,
           plant.z + Math.sin(angle) * radial,
         )
-        euler.set(
-          Math.sin(angle) * 0.7,
-          angle,
-          Math.cos(angle) * 0.7,
-          'YXZ',
-        )
+        euler.set(Math.sin(angle) * 0.7, angle, Math.cos(angle) * 0.7, 'YXZ')
         quaternion.setFromEuler(euler)
         const length = plant.scale * (0.58 + (frond % 3) * 0.09)
         scale.set(length * 0.7, length, 1)
@@ -307,18 +309,36 @@ export function Understory({ plants }: { plants: UnderstoryPlacement[] }) {
   return (
     <group>
       {groups.ferns.length > 0 && (
-        <instancedMesh ref={fernRef} args={[fernGeometry, undefined, groups.ferns.length * fernFronds]}>
-          <meshStandardMaterial roughness={1} metalness={0} side={THREE.DoubleSide} />
+        <instancedMesh ref={fernRef} args={[fernGeometry, undefined, groups.ferns.length * fernFronds]} castShadow>
+          <WindStandardMaterial
+            strength={0.14}
+            enabled={!reducedMotion}
+            roughness={1}
+            metalness={0}
+            side={THREE.DoubleSide}
+          />
         </instancedMesh>
       )}
       {groups.shrubs.length > 0 && (
         <instancedMesh ref={shrubRef} args={[shrubGeometry, undefined, groups.shrubs.length * shrubClumps]} castShadow>
-          <meshStandardMaterial roughness={1} metalness={0} />
+          <WindStandardMaterial
+            strength={0.072}
+            whole
+            enabled={!reducedMotion}
+            roughness={1}
+            metalness={0}
+          />
         </instancedMesh>
       )}
       {groups.grasses.length > 0 && (
-        <instancedMesh ref={grassRef} args={[grassGeometry, undefined, groups.grasses.length * grassBlades]}>
-          <meshStandardMaterial roughness={1} metalness={0} side={THREE.DoubleSide} />
+        <instancedMesh ref={grassRef} args={[grassGeometry, undefined, groups.grasses.length * grassBlades]} castShadow>
+          <WindStandardMaterial
+            strength={0.17}
+            enabled={!reducedMotion}
+            roughness={1}
+            metalness={0}
+            side={THREE.DoubleSide}
+          />
         </instancedMesh>
       )}
       {groups.mosses.length > 0 && (
@@ -342,7 +362,13 @@ export function Understory({ plants }: { plants: UnderstoryPlacement[] }) {
             <meshStandardMaterial roughness={1} metalness={0} />
           </instancedMesh>
           <instancedMesh ref={saplingLeafRef} args={[saplingLeafGeometry, undefined, groups.saplings.length * saplingLeaves]} castShadow>
-            <meshStandardMaterial roughness={0.98} metalness={0} />
+            <WindStandardMaterial
+              strength={0.09}
+              whole
+              enabled={!reducedMotion}
+              roughness={0.98}
+              metalness={0}
+            />
           </instancedMesh>
         </>
       )}

@@ -95,9 +95,9 @@ function World({
   return (
     <group ref={world} scale={0.135} rotation={[Math.PI * 0.48, 0, 0]}>
       <Terrain seed={seed} />
-      <River seed={seed} />
-      <Forest seed={seed} />
-      <Atmosphere seed={seed} />
+      <River seed={seed} reducedMotion={reducedMotion} />
+      <Forest seed={seed} reducedMotion={reducedMotion} />
+      <Atmosphere seed={seed} reducedMotion={reducedMotion} />
     </group>
   )
 }

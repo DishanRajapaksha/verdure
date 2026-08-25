@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { generateForest, generateRocks, generateUnderstory } from '../lib/forest'
 import type { TreePlacement } from '../lib/forest'
 import { Understory } from './Understory'
+import { WindStandardMaterial } from './WindMaterial'
 
 const trunkDark = new THREE.Color('#3d2d22')
 const trunkWarm = new THREE.Color('#6a4a31')
@@ -34,7 +35,15 @@ function treeTrunkColour(tree: TreePlacement, target: THREE.Color) {
   return target.copy(trunkDark).lerp(trunkWarm, 0.25 + tree.tint * 0.4)
 }
 
-export function Forest({ seed, size = 40 }: { seed: string; size?: number }) {
+export function Forest({
+  seed,
+  size = 40,
+  reducedMotion = false,
+}: {
+  seed: string
+  size?: number
+  reducedMotion?: boolean
+}) {
   const trees = useMemo(() => generateForest(seed, size), [seed, size])
   const rocks = useMemo(() => generateRocks(seed, size), [seed, size])
   const understory = useMemo(() => generateUnderstory(seed, size), [seed, size])
@@ -230,18 +239,30 @@ export function Forest({ seed, size = 40 }: { seed: string; size?: number }) {
           args={[canopyGeometry, undefined, broadleafTrees.length * broadleafClumps.length]}
           castShadow
         >
-          <meshStandardMaterial roughness={0.97} metalness={0} />
+          <WindStandardMaterial
+            strength={0.095}
+            whole
+            enabled={!reducedMotion}
+            roughness={0.97}
+            metalness={0}
+          />
         </instancedMesh>
       )}
       {conifers.length > 0 && (
         <instancedMesh ref={coniferRef} args={[coniferGeometry, undefined, conifers.length * coniferLayers]} castShadow>
-          <meshStandardMaterial roughness={0.98} metalness={0} />
+          <WindStandardMaterial
+            strength={0.062}
+            whole
+            enabled={!reducedMotion}
+            roughness={0.98}
+            metalness={0}
+          />
         </instancedMesh>
       )}
       <instancedMesh ref={rockRef} args={[rockGeometry, undefined, rocks.length]} receiveShadow>
         <meshStandardMaterial roughness={1} metalness={0} />
       </instancedMesh>
-      <Understory plants={understory} />
+      <Understory plants={understory} reducedMotion={reducedMotion} />
     </group>
   )
 }
