@@ -1,40 +1,56 @@
 import { useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 import type { ExperienceMode } from '../App'
 import { Terrain } from './Terrain'
 import { Forest } from './Forest'
 import { Atmosphere } from './Atmosphere'
 import { Gem } from './Gem'
+import { WanderControls } from './WanderControls'
 
-function CameraRig({ mode }: { mode: ExperienceMode }) {
+function CameraRig({
+  mode,
+  reducedMotion,
+  onWanderReady,
+}: {
+  mode: ExperienceMode
+  reducedMotion: boolean
+  onWanderReady: (ready: boolean) => void
+}) {
   const { camera } = useThree()
   const previousMode = useRef(mode)
-  const transitionRemaining = useRef(2.2)
-  const [controlsReady, setControlsReady] = useState(false)
+  const transitionRemaining = useRef(reducedMotion ? 0 : 2.2)
 
   useEffect(() => {
-    if (previousMode.current !== mode) {
-      previousMode.current = mode
-      transitionRemaining.current = 2.2
-      setControlsReady(false)
-    }
+    if (previousMode.current !== mode) previousMode.current = mode
+    transitionRemaining.current = reducedMotion ? 0.04 : 2.2
+    onWanderReady(false)
 
-    const timer = window.setTimeout(() => setControlsReady(mode === 'immersed'), 1900)
+    const timer = window.setTimeout(
+      () => onWanderReady(mode === 'immersed'),
+      reducedMotion ? 40 : 1900,
+    )
     return () => window.clearTimeout(timer)
-  }, [mode])
+  }, [mode, reducedMotion, onWanderReady])
 
   useFrame((_, delta) => {
     if (transitionRemaining.current <= 0) return
     transitionRemaining.current -= delta
 
-    const targetPosition = mode === 'specimen'
+    const specimen = mode === 'specimen'
+    const targetPosition = specimen
       ? new THREE.Vector3(0, 0.15, 16.5)
       : new THREE.Vector3(0, 2.5, 8.2)
-    const lookAt = mode === 'specimen'
+    const lookAt = specimen
       ? new THREE.Vector3(0, 0, 0)
       : new THREE.Vector3(0, 1.15, 0)
+
+    if (reducedMotion) {
+      camera.position.copy(targetPosition)
+      camera.lookAt(lookAt)
+      transitionRemaining.current = 0
+      return
+    }
 
     camera.position.x = THREE.MathUtils.damp(camera.position.x, targetPosition.x, 2.2, delta)
     camera.position.y = THREE.MathUtils.damp(camera.position.y, targetPosition.y, 2.2, delta)
@@ -42,44 +58,37 @@ function CameraRig({ mode }: { mode: ExperienceMode }) {
     camera.lookAt(lookAt)
   })
 
-  return mode === 'immersed' ? (
-    <OrbitControls
-      enabled={controlsReady}
-      target={[0, 1.15, 0]}
-      enablePan={false}
-      enableDamping
-      dampingFactor={0.045}
-      minDistance={3.5}
-      maxDistance={13}
-      minPolarAngle={Math.PI * 0.25}
-      maxPolarAngle={Math.PI * 0.56}
-      rotateSpeed={0.28}
-      zoomSpeed={0.35}
-    />
-  ) : null
+  return null
 }
 
-function World({ mode, seed }: { mode: ExperienceMode; seed: string }) {
+function World({
+  mode,
+  seed,
+  reducedMotion,
+}: {
+  mode: ExperienceMode
+  seed: string
+  reducedMotion: boolean
+}) {
   const world = useRef<THREE.Group>(null)
 
   useFrame((_, delta) => {
     if (!world.current) return
     const targetScale = mode === 'specimen' ? 0.135 : 1
-    const current = world.current.scale.x
-    const next = THREE.MathUtils.damp(current, targetScale, 1.9, delta)
+    const targetRotation = mode === 'specimen' ? Math.PI * 0.48 : 0
+    const targetY = mode === 'specimen' ? -0.1 : -0.7
+
+    if (reducedMotion) {
+      world.current.scale.setScalar(targetScale)
+      world.current.rotation.x = targetRotation
+      world.current.position.y = targetY
+      return
+    }
+
+    const next = THREE.MathUtils.damp(world.current.scale.x, targetScale, 1.9, delta)
     world.current.scale.setScalar(next)
-    world.current.rotation.x = THREE.MathUtils.damp(
-      world.current.rotation.x,
-      mode === 'specimen' ? Math.PI * 0.48 : 0,
-      1.75,
-      delta,
-    )
-    world.current.position.y = THREE.MathUtils.damp(
-      world.current.position.y,
-      mode === 'specimen' ? -0.1 : -0.7,
-      1.8,
-      delta,
-    )
+    world.current.rotation.x = THREE.MathUtils.damp(world.current.rotation.x, targetRotation, 1.75, delta)
+    world.current.position.y = THREE.MathUtils.damp(world.current.position.y, targetY, 1.8, delta)
   })
 
   return (
@@ -91,26 +100,68 @@ function World({ mode, seed }: { mode: ExperienceMode; seed: string }) {
   )
 }
 
-function Specimen({ mode, seed }: { mode: ExperienceMode; seed: string }) {
+function Specimen({
+  mode,
+  seed,
+  reducedMotion,
+}: {
+  mode: ExperienceMode
+  seed: string
+  reducedMotion: boolean
+}) {
   const root = useRef<THREE.Group>(null)
 
   useFrame((state, delta) => {
     if (!root.current) return
-    const targetX = mode === 'specimen' ? state.pointer.y * 0.075 : 0
-    const targetY = mode === 'specimen' ? state.pointer.x * 0.11 : 0
+    const targetX = mode === 'specimen' && !reducedMotion ? state.pointer.y * 0.075 : 0
+    const targetY = mode === 'specimen' && !reducedMotion ? state.pointer.x * 0.11 : 0
     root.current.rotation.x = THREE.MathUtils.damp(root.current.rotation.x, targetX, 2.6, delta)
     root.current.rotation.y = THREE.MathUtils.damp(root.current.rotation.y, targetY, 2.6, delta)
   })
 
   return (
     <group ref={root}>
-      <World mode={mode} seed={seed} />
+      <World mode={mode} seed={seed} reducedMotion={reducedMotion} />
       <Gem mode={mode} seed={seed} />
     </group>
   )
 }
 
-export function VerdureScene({ mode, seed }: { mode: ExperienceMode; seed: string }) {
+function SceneContents({
+  mode,
+  seed,
+  reducedMotion,
+}: {
+  mode: ExperienceMode
+  seed: string
+  reducedMotion: boolean
+}) {
+  const [wanderReady, setWanderReady] = useState(false)
+
+  return (
+    <>
+      <color attach="background" args={['#07100c']} />
+      <fog attach="fog" args={['#0a1510', 11, 38]} />
+      <ambientLight intensity={0.42} />
+      <hemisphereLight args={['#c9d6bc', '#07100c', 1.35]} />
+      <directionalLight position={[6, 10, 7]} intensity={2.2} color="#d9e5c4" />
+      <pointLight position={[-7, 2, 5]} intensity={12} distance={18} color="#9a88ad" />
+      <Specimen mode={mode} seed={seed} reducedMotion={reducedMotion} />
+      <CameraRig mode={mode} reducedMotion={reducedMotion} onWanderReady={setWanderReady} />
+      <WanderControls enabled={mode === 'immersed' && wanderReady} seed={seed} />
+    </>
+  )
+}
+
+export function VerdureScene({
+  mode,
+  seed,
+  reducedMotion,
+}: {
+  mode: ExperienceMode
+  seed: string
+  reducedMotion: boolean
+}) {
   return (
     <Canvas
       camera={{ position: [0, 0.15, 16.5], fov: 42, near: 0.05, far: 90 }}
@@ -122,14 +173,7 @@ export function VerdureScene({ mode, seed }: { mode: ExperienceMode; seed: strin
         gl.toneMappingExposure = 1.05
       }}
     >
-      <color attach="background" args={['#07100c']} />
-      <fog attach="fog" args={['#0a1510', 11, 38]} />
-      <ambientLight intensity={0.42} />
-      <hemisphereLight args={['#c9d6bc', '#07100c', 1.35]} />
-      <directionalLight position={[6, 10, 7]} intensity={2.2} color="#d9e5c4" />
-      <pointLight position={[-7, 2, 5]} intensity={12} distance={18} color="#9a88ad" />
-      <Specimen mode={mode} seed={seed} />
-      <CameraRig mode={mode} />
+      <SceneContents mode={mode} seed={seed} reducedMotion={reducedMotion} />
     </Canvas>
   )
 }

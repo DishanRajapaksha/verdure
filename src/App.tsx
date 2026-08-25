@@ -45,7 +45,7 @@ export function App() {
   return (
     <main className={`experience experience--${mode} ${reducedMotion ? 'reduce-motion' : ''}`}>
       <div className="scene" aria-hidden="true">
-        <VerdureScene mode={mode} seed={seed} />
+        <VerdureScene mode={mode} seed={seed} reducedMotion={reducedMotion} />
       </div>
 
       <header className="chrome chrome--top">
@@ -69,7 +69,11 @@ export function App() {
       </section>
 
       <footer className="chrome chrome--bottom">
-        <span>{mode === 'specimen' ? 'move the pointer to turn the specimen' : 'drag to wander · esc to surface'}</span>
+        <span>
+          {mode === 'specimen'
+            ? 'move the pointer to turn the specimen'
+            : 'drag to look · wasd / arrows or scroll to wander · esc to surface'}
+        </span>
         <span className="seed" title="This seed reproduces the same forest">seed {seed}</span>
       </footer>
     </main>
