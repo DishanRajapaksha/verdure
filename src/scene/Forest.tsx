@@ -231,7 +231,12 @@ export function Forest({
         <meshStandardMaterial roughness={1} metalness={0} />
       </instancedMesh>
       <instancedMesh ref={branchRef} args={[branchGeometry, undefined, trees.length * branchCount]} castShadow>
-        <meshStandardMaterial roughness={1} metalness={0} />
+        <WindStandardMaterial
+          strength={0.046}
+          enabled={!reducedMotion}
+          roughness={1}
+          metalness={0}
+        />
       </instancedMesh>
       {broadleafTrees.length > 0 && (
         <instancedMesh

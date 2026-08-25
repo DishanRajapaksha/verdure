@@ -4,8 +4,10 @@ import * as THREE from 'three'
 import type { ExperienceMode } from '../App'
 import { Terrain } from './Terrain'
 import { River } from './River'
+import { RiverLife } from './RiverLife'
 import { Forest } from './Forest'
 import { Atmosphere } from './Atmosphere'
+import { AmbientLife } from './AmbientLife'
 import { Gem } from './Gem'
 import { WanderControls } from './WanderControls'
 
@@ -96,8 +98,10 @@ function World({
     <group ref={world} scale={0.135} rotation={[Math.PI * 0.48, 0, 0]}>
       <Terrain seed={seed} />
       <River seed={seed} reducedMotion={reducedMotion} />
+      <RiverLife seed={seed} reducedMotion={reducedMotion} />
       <Forest seed={seed} reducedMotion={reducedMotion} />
       <Atmosphere seed={seed} reducedMotion={reducedMotion} />
+      <AmbientLife seed={seed} reducedMotion={reducedMotion} />
     </group>
   )
 }
