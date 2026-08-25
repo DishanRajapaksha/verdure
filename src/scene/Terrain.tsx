@@ -4,14 +4,14 @@ import { terrainHeight } from '../lib/forest'
 
 export function Terrain({ seed, size = 40 }: { seed: string; size?: number }) {
   const geometry = useMemo(() => {
-    const terrain = new THREE.PlaneGeometry(size, size, 88, 88)
+    const terrain = new THREE.PlaneGeometry(size, size, 112, 112)
     terrain.rotateX(-Math.PI / 2)
     const positions = terrain.attributes.position
 
     for (let index = 0; index < positions.count; index += 1) {
       const x = positions.getX(index)
       const z = positions.getZ(index)
-      positions.setY(index, terrainHeight(x, z, seed) - 0.3)
+      positions.setY(index, terrainHeight(x, z, seed, size))
     }
 
     positions.needsUpdate = true

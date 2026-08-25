@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import type { ExperienceMode } from '../App'
 import { Terrain } from './Terrain'
+import { River } from './River'
 import { Forest } from './Forest'
 import { Atmosphere } from './Atmosphere'
 import { Gem } from './Gem'
@@ -94,6 +95,7 @@ function World({
   return (
     <group ref={world} scale={0.135} rotation={[Math.PI * 0.48, 0, 0]}>
       <Terrain seed={seed} />
+      <River seed={seed} />
       <Forest seed={seed} />
       <Atmosphere seed={seed} />
     </group>
@@ -142,10 +144,25 @@ function SceneContents({
     <>
       <color attach="background" args={['#07100c']} />
       <fog attach="fog" args={['#0a1510', 11, 38]} />
-      <ambientLight intensity={0.42} />
-      <hemisphereLight args={['#c9d6bc', '#07100c', 1.35]} />
-      <directionalLight position={[6, 10, 7]} intensity={2.2} color="#d9e5c4" />
-      <pointLight position={[-7, 2, 5]} intensity={12} distance={18} color="#9a88ad" />
+      <ambientLight intensity={0.31} />
+      <hemisphereLight args={['#c9d6bc', '#07100c', 1.05]} />
+      <directionalLight
+        position={[7, 12, 6]}
+        intensity={2.45}
+        color="#d9e5c4"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-left={-24}
+        shadow-camera-right={24}
+        shadow-camera-top={24}
+        shadow-camera-bottom={-24}
+        shadow-camera-near={0.5}
+        shadow-camera-far={42}
+        shadow-bias={-0.00035}
+        shadow-normalBias={0.035}
+      />
+      <pointLight position={[-7, 2, 5]} intensity={10} distance={18} color="#9a88ad" />
       <Specimen mode={mode} seed={seed} reducedMotion={reducedMotion} />
       <CameraRig mode={mode} reducedMotion={reducedMotion} onWanderReady={setWanderReady} />
       <WanderControls enabled={mode === 'immersed' && wanderReady} seed={seed} />
@@ -164,6 +181,7 @@ export function VerdureScene({
 }) {
   return (
     <Canvas
+      shadows
       camera={{ position: [0, 0.15, 16.5], fov: 42, near: 0.05, far: 90 }}
       dpr={[1, 1.8]}
       gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
@@ -171,6 +189,8 @@ export function VerdureScene({
         gl.outputColorSpace = THREE.SRGBColorSpace
         gl.toneMapping = THREE.ACESFilmicToneMapping
         gl.toneMappingExposure = 1.05
+        gl.shadowMap.enabled = true
+        gl.shadowMap.type = THREE.PCFSoftShadowMap
       }}
     >
       <SceneContents mode={mode} seed={seed} reducedMotion={reducedMotion} />

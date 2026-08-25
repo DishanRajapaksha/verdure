@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   forestDensity,
   generateForest,
+  generateRiver,
   generateUnderstory,
+  naturalTerrainHeight,
   terrainHeight,
   vegetationWetness,
 } from './forest'
@@ -24,6 +26,25 @@ describe('procedural world', () => {
     const first = generateUnderstory('mosslight', 18)
     const second = generateUnderstory('mosslight', 18)
     expect(second).toEqual(first)
+  })
+
+  it('recreates the same river from the same seed', () => {
+    const first = generateRiver('mosslight', 30)
+    const second = generateRiver('mosslight', 30)
+    expect(second).toEqual(first)
+    expect(first.length).toBeGreaterThan(20)
+  })
+
+  it('routes water downhill and cuts a channel below the natural surface', () => {
+    const river = generateRiver('watershed', 40)
+    for (let index = 1; index < river.length; index += 1) {
+      expect(river[index].waterY).toBeLessThan(river[index - 1].waterY)
+    }
+
+    const middle = river[Math.floor(river.length / 2)]
+    expect(terrainHeight(middle.x, middle.z, 'watershed', 40)).toBeLessThan(
+      naturalTerrainHeight(middle.x, middle.z, 'watershed'),
+    )
   })
 
   it('changes the specimen when the seed changes', () => {
