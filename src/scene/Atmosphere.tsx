@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mulberry32, seedToUint32 } from '../lib/noise'
 import { generateRiver, terrainHeight } from '../lib/forest'
+import { gustAt, mistPoolWeight } from '../lib/environment'
 import { LeafDrift } from './LeafDrift'
 
 function makeMistTexture(): THREE.CanvasTexture {
@@ -36,37 +37,58 @@ export function Atmosphere({
 
   const banks = useMemo(() => {
     const random = mulberry32(seedToUint32(seed) ^ 0x2da9f31b)
-    const scattered = Array.from({ length: 16 }, (_, index) => {
-      const x = (random() - 0.5) * size * 0.82
-      const z = (random() - 0.5) * size * 0.82
-      return {
+    const scattered: Array<{
+      x: number
+      y: number
+      z: number
+      scale: readonly [number, number, number]
+      opacity: number
+      phase: number
+      driftX: number
+      driftZ: number
+      colour: string
+      pool: number
+    }> = []
+
+    for (let attempt = 0; attempt < 180 && scattered.length < 20; attempt += 1) {
+      const x = (random() - 0.5) * size * 0.86
+      const z = (random() - 0.5) * size * 0.86
+      const pool = mistPoolWeight(x, z, seed, size)
+      if (random() > 0.12 + pool * 0.94) continue
+      const index = scattered.length
+      scattered.push({
         x,
-        y: terrainHeight(x, z, seed, size) + 0.48 + random() * 0.72,
+        y: terrainHeight(x, z, seed, size) + 0.34 + random() * (0.38 + (1 - pool) * 0.35),
         z,
-        scale: [3.2 + random() * 5.5, 1.2 + random() * 2.3, 1] as const,
-        opacity: 0.045 + random() * 0.085,
+        scale: [3.4 + random() * 5.8 + pool * 2.4, 0.95 + random() * 1.45 + pool * 0.7, 1] as const,
+        opacity: 0.035 + pool * 0.105 + random() * 0.025,
         phase: random() * Math.PI * 2,
-        driftX: 0.35 + random() * 0.75,
-        driftZ: 0.22 + random() * 0.58,
+        driftX: 0.18 + random() * 0.58,
+        driftZ: 0.16 + random() * 0.48,
         colour: index % 3 === 0 ? '#aaa1ba' : '#bcc6ba',
-      }
-    })
+        pool,
+      })
+    }
 
     const river = generateRiver(seed, size)
     const riverBanks = river
       .filter((_, index) => index > 3 && index < river.length - 4 && index % 7 === 0)
-      .slice(0, 8)
-      .map((point, index) => ({
-        x: point.x,
-        y: point.waterY + 0.32 + (index % 3) * 0.08,
-        z: point.z,
-        scale: [4.2 + point.width * 2.8, 1.05 + point.width * 0.55, 1] as const,
-        opacity: 0.045 + (index % 2) * 0.02,
-        phase: index * 0.91 + 0.7,
-        driftX: 0.2 + point.width * 0.35,
-        driftZ: 0.25 + point.width * 0.3,
-        colour: index % 2 === 0 ? '#b7bcc4' : '#aaa1ba',
-      }))
+      .slice(0, 9)
+      .map((point, index) => {
+        const pool = mistPoolWeight(point.x, point.z, seed, size)
+        return {
+          x: point.x,
+          y: point.waterY + 0.24 + (index % 3) * 0.06,
+          z: point.z,
+          scale: [4.4 + point.width * 3.2 + pool * 1.8, 0.88 + point.width * 0.48 + pool * 0.55, 1] as const,
+          opacity: 0.04 + pool * 0.075,
+          phase: index * 0.91 + 0.7,
+          driftX: 0.14 + point.width * 0.3,
+          driftZ: 0.18 + point.width * 0.28,
+          colour: index % 2 === 0 ? '#b7bcc4' : '#aaa1ba',
+          pool,
+        }
+      })
 
     return [...scattered, ...riverBanks]
   }, [seed, size])
@@ -92,12 +114,16 @@ export function Atmosphere({
       mistRef.current.children.forEach((child, index) => {
         const bank = banks[index]
         if (!bank) return
-        child.position.x = bank.x + Math.sin(time * 0.055 + bank.phase) * bank.driftX * motion
-        child.position.z = bank.z + Math.cos(time * 0.043 + bank.phase * 1.31) * bank.driftZ * motion
-        child.position.y = bank.y + Math.sin(time * 0.1 + bank.phase) * 0.14 * motion
+        const gust = reducedMotion ? 0 : gustAt(bank.x, bank.z, time, seed)
+        const drift = (0.32 + gust * 0.68) * motion
+        child.position.x = bank.x + Math.sin(time * 0.055 + bank.phase) * bank.driftX * drift
+        child.position.z = bank.z + Math.cos(time * 0.043 + bank.phase * 1.31) * bank.driftZ * drift
+        child.position.y = bank.y + Math.sin(time * 0.1 + bank.phase) * 0.1 * motion
         const sprite = child as THREE.Sprite
         const material = sprite.material as THREE.SpriteMaterial
-        material.opacity = bank.opacity * (0.9 + Math.sin(time * 0.075 + bank.phase) * 0.1 * motion)
+        const breathing = 0.9 + Math.sin(time * 0.075 + bank.phase) * 0.1 * motion
+        const windThinning = 1 - gust * 0.5
+        material.opacity = bank.opacity * breathing * windThinning * (0.82 + bank.pool * 0.18)
       })
     }
 
@@ -110,9 +136,10 @@ export function Atmosphere({
         const baseY = motes[index * 3 + 1]
         const baseZ = motes[index * 3 + 2]
         const phase = index * 0.6180339
-        positions[index * 3] = baseX + Math.sin(time * 0.14 + phase) * 0.16 * motion
+        const gust = reducedMotion ? 0 : gustAt(baseX, baseZ, time, seed)
+        positions[index * 3] = baseX + Math.sin(time * 0.14 + phase) * (0.08 + gust * 0.28) * motion
         positions[index * 3 + 1] = baseY + Math.sin(time * 0.22 + phase * 1.7) * 0.12 * motion
-        positions[index * 3 + 2] = baseZ + Math.cos(time * 0.11 + phase) * 0.13 * motion
+        positions[index * 3 + 2] = baseZ + Math.cos(time * 0.11 + phase) * (0.07 + gust * 0.2) * motion
       }
       attribute.needsUpdate = true
     }

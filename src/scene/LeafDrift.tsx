@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mulberry32, seedToUint32 } from '../lib/noise'
 import { terrainHeight } from '../lib/forest'
+import { gustAt } from '../lib/environment'
 
 type LeafParticle = {
   x: number
@@ -84,22 +85,23 @@ export function LeafDrift({
     const euler = new THREE.Euler()
 
     leaves.forEach((leaf, index) => {
+      const gust = reducedMotion ? 0 : gustAt(leaf.x, leaf.z, time, seed)
       const span = 6.4
-      const falling = leaf.startHeight - leaf.groundY - time * leaf.speed
+      const falling = leaf.startHeight - leaf.groundY - time * leaf.speed * (0.88 + gust * 0.42)
       const wrapped = ((falling % span) + span) % span
       const y = leaf.groundY + 0.18 + wrapped
-      const gust = 0.7 + 0.3 * Math.sin(time * 0.38 + leaf.phase)
-      const x = leaf.x + Math.sin(time * 0.42 + leaf.phase) * 0.72 * gust
-      const z = leaf.z + Math.cos(time * 0.31 + leaf.phase * 1.7) * 0.52 * gust
+      const gustSweep = 0.22 + gust * 1.08
+      const x = leaf.x + Math.sin(time * (0.3 + gust * 0.28) + leaf.phase) * 0.82 * gustSweep
+      const z = leaf.z + Math.cos(time * (0.25 + gust * 0.22) + leaf.phase * 1.7) * 0.58 * gustSweep
 
       position.set(x, y, z)
       euler.set(
-        time * leaf.spin + leaf.phase,
-        leaf.phase + Math.sin(time * 1.2 + leaf.phase) * 0.9,
-        Math.sin(time * 1.8 + leaf.phase) * 0.8,
+        time * leaf.spin * (0.72 + gust * 0.9) + leaf.phase,
+        leaf.phase + Math.sin(time * 1.2 + leaf.phase) * (0.45 + gust * 0.72),
+        Math.sin(time * 1.8 + leaf.phase) * (0.38 + gust * 0.76),
       )
       quaternion.setFromEuler(euler)
-      const flutter = leaf.size * (0.9 + Math.sin(time * 2.4 + leaf.phase) * 0.08)
+      const flutter = leaf.size * (0.9 + Math.sin(time * (2.1 + gust * 2.8) + leaf.phase) * 0.08)
       scale.setScalar(flutter)
       matrix.compose(position, quaternion, scale)
       mesh.setMatrixAt(index, matrix)

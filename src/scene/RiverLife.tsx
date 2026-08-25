@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { generateRiver } from '../lib/forest'
 import { mulberry32, seedToUint32 } from '../lib/noise'
+import { riverAgitation, riverFlowSpeedAtIndex } from '../lib/environment'
 
 type RiverStone = {
   x: number
@@ -15,6 +16,7 @@ type RiverStone = {
   normalX: number
   normalZ: number
   waterY: number
+  flow: number
 }
 
 type FoamStreak = {
@@ -34,6 +36,14 @@ type Constriction = {
   tangentZ: number
   phase: number
   radius: number
+  flow: number
+}
+
+type Eddy = {
+  stone: number
+  phase: number
+  side: number
+  radius: number
 }
 
 const stoneDark = new THREE.Color('#26322f')
@@ -51,6 +61,7 @@ export function RiverLife({
   const stoneRef = useRef<THREE.InstancedMesh>(null)
   const foamRef = useRef<THREE.InstancedMesh>(null)
   const rippleRef = useRef<THREE.InstancedMesh>(null)
+  const eddyRef = useRef<THREE.InstancedMesh>(null)
 
   const stoneGeometry = useMemo(() => new THREE.DodecahedronGeometry(0.5, 1), [])
   const foamGeometry = useMemo(() => {
@@ -60,6 +71,11 @@ export function RiverLife({
   }, [])
   const rippleGeometry = useMemo(() => {
     const geometry = new THREE.RingGeometry(0.43, 0.5, 28)
+    geometry.rotateX(-Math.PI / 2)
+    return geometry
+  }, [])
+  const eddyGeometry = useMemo(() => {
+    const geometry = new THREE.RingGeometry(0.35, 0.43, 28, 1, 0, Math.PI * 1.45)
     geometry.rotateX(-Math.PI / 2)
     return geometry
   }, [])
@@ -96,6 +112,7 @@ export function RiverLife({
         normalX,
         normalZ,
         waterY: point.waterY,
+        flow: riverFlowSpeedAtIndex(river, index),
       })
     }
 
@@ -104,24 +121,28 @@ export function RiverLife({
 
   const foam = useMemo<FoamStreak[]>(() => {
     const random = mulberry32(seedToUint32(seed) ^ 0x91e10da5)
-    return stones.flatMap((_, stone) => [
-      {
-        stone,
-        phase: random(),
-        side: -1,
-        speed: 0.22 + random() * 0.13,
-        width: 0.12 + random() * 0.07,
-        length: 0.38 + random() * 0.24,
-      },
-      {
-        stone,
-        phase: random(),
-        side: 1,
-        speed: 0.18 + random() * 0.15,
-        width: 0.1 + random() * 0.08,
-        length: 0.3 + random() * 0.3,
-      },
-    ])
+    return stones.flatMap((stone, stoneIndex) => {
+      const agitation = riverAgitation(stone.flow)
+      const baseSpeed = 0.12 + stone.flow * 0.2
+      return [
+        {
+          stone: stoneIndex,
+          phase: random(),
+          side: -1,
+          speed: baseSpeed * (0.88 + random() * 0.3),
+          width: 0.1 + random() * 0.07 + agitation * 0.045,
+          length: 0.34 + random() * 0.22 + agitation * 0.22,
+        },
+        {
+          stone: stoneIndex,
+          phase: random(),
+          side: 1,
+          speed: baseSpeed * (0.8 + random() * 0.36),
+          width: 0.09 + random() * 0.07 + agitation * 0.035,
+          length: 0.28 + random() * 0.28 + agitation * 0.18,
+        },
+      ]
+    })
   }, [seed, stones])
 
   const constrictions = useMemo<Constriction[]>(() => {
@@ -149,6 +170,7 @@ export function RiverLife({
       const tangentLength = Math.hypot(tangentXRaw, tangentZRaw) || 1
       const tangentX = tangentXRaw / tangentLength
       const tangentZ = tangentZRaw / tangentLength
+      const flow = riverFlowSpeedAtIndex(river, index)
       return [0, 1].map((ring) => ({
         x: point.x,
         y: point.waterY + 0.026,
@@ -157,9 +179,21 @@ export function RiverLife({
         tangentZ,
         phase: selectedIndex * 0.173 + ring * 0.48,
         radius: point.width * (0.62 + ring * 0.18),
+        flow,
       }))
     })
   }, [river])
+
+  const eddies = useMemo<Eddy[]>(() => {
+    return stones
+      .map((stone, index) => ({
+        stone: index,
+        phase: index * 0.371,
+        side: index % 2 === 0 ? -1 : 1,
+        radius: stone.scale * (0.72 + riverAgitation(stone.flow) * 0.52),
+      }))
+      .filter((_, index) => index % 2 === 0)
+  }, [stones])
 
   useLayoutEffect(() => {
     const mesh = stoneRef.current
@@ -200,7 +234,7 @@ export function RiverLife({
       foam.forEach((streak, index) => {
         const stone = stones[streak.stone]
         const cycle = (streak.phase + time * streak.speed) % 1
-        const travel = -0.18 + cycle * 0.74
+        const travel = -0.18 + cycle * (0.58 + stone.flow * 0.18)
         const wake = Math.sin(cycle * Math.PI)
         position.set(
           stone.x + stone.tangentX * travel + stone.normalX * streak.side * stone.scale * 0.48,
@@ -219,69 +253,65 @@ export function RiverLife({
     const rippleMesh = rippleRef.current
     if (rippleMesh) {
       constrictions.forEach((ripple, index) => {
-        const cycle = (ripple.phase + time * 0.24) % 1
-        const downstream = cycle * 0.48
+        const cycle = (ripple.phase + time * (0.12 + ripple.flow * 0.2)) % 1
+        const downstream = cycle * (0.28 + ripple.flow * 0.24)
         position.set(
           ripple.x + ripple.tangentX * downstream,
           ripple.y,
           ripple.z + ripple.tangentZ * downstream,
         )
         quaternion.identity()
-        const expansion = ripple.radius * (0.72 + cycle * 0.95)
+        const expansion = ripple.radius * (0.72 + cycle * (0.72 + riverAgitation(ripple.flow) * 0.42))
         scale.set(expansion * 1.55, 1, expansion * 0.72)
         matrix.compose(position, quaternion, scale)
         rippleMesh.setMatrixAt(index, matrix)
       })
       rippleMesh.instanceMatrix.needsUpdate = true
     }
+
+    const eddyMesh = eddyRef.current
+    if (eddyMesh) {
+      eddies.forEach((eddy, index) => {
+        const stone = stones[eddy.stone]
+        const agitation = riverAgitation(stone.flow)
+        const downstream = stone.scale * (0.72 + agitation * 0.46)
+        const side = stone.scale * eddy.side * 0.5
+        position.set(
+          stone.x + stone.tangentX * downstream + stone.normalX * side,
+          stone.waterY + 0.03,
+          stone.z + stone.tangentZ * downstream + stone.normalZ * side,
+        )
+        euler.set(0, time * (0.35 + stone.flow * 0.72) * eddy.side + eddy.phase, 0)
+        quaternion.setFromEuler(euler)
+        const pulse = 0.82 + Math.sin(time * (0.9 + stone.flow) + eddy.phase) * 0.16
+        scale.set(eddy.radius * pulse * 1.5, 1, eddy.radius * pulse)
+        matrix.compose(position, quaternion, scale)
+        eddyMesh.setMatrixAt(index, matrix)
+      })
+      eddyMesh.instanceMatrix.needsUpdate = true
+    }
   })
 
   return (
     <group>
       {stones.length > 0 && (
-        <instancedMesh
-          ref={stoneRef}
-          args={[stoneGeometry, undefined, stones.length]}
-          castShadow
-          receiveShadow
-        >
+        <instancedMesh ref={stoneRef} args={[stoneGeometry, undefined, stones.length]} castShadow receiveShadow>
           <meshStandardMaterial roughness={0.88} metalness={0} />
         </instancedMesh>
       )}
       {foam.length > 0 && (
-        <instancedMesh
-          ref={foamRef}
-          args={[foamGeometry, undefined, foam.length]}
-          frustumCulled={false}
-          renderOrder={4}
-        >
-          <meshBasicMaterial
-            color="#dce7d7"
-            transparent
-            opacity={0.28}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
+        <instancedMesh ref={foamRef} args={[foamGeometry, undefined, foam.length]} frustumCulled={false} renderOrder={4}>
+          <meshBasicMaterial color="#dce7d7" transparent opacity={0.28} depthWrite={false} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} toneMapped={false} />
         </instancedMesh>
       )}
       {constrictions.length > 0 && (
-        <instancedMesh
-          ref={rippleRef}
-          args={[rippleGeometry, undefined, constrictions.length]}
-          frustumCulled={false}
-          renderOrder={3}
-        >
-          <meshBasicMaterial
-            color="#b9cec5"
-            transparent
-            opacity={0.2}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
+        <instancedMesh ref={rippleRef} args={[rippleGeometry, undefined, constrictions.length]} frustumCulled={false} renderOrder={3}>
+          <meshBasicMaterial color="#b9cec5" transparent opacity={0.2} depthWrite={false} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} toneMapped={false} />
+        </instancedMesh>
+      )}
+      {eddies.length > 0 && (
+        <instancedMesh ref={eddyRef} args={[eddyGeometry, undefined, eddies.length]} frustumCulled={false} renderOrder={4}>
+          <meshBasicMaterial color="#c6d8d1" transparent opacity={0.16} depthWrite={false} side={THREE.DoubleSide} blending={THREE.AdditiveBlending} toneMapped={false} />
         </instancedMesh>
       )}
     </group>
